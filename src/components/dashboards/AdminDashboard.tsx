@@ -7,6 +7,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, Users, Store, Package } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 const AdminDashboard = ({ user }: { user: User }) => {
   const { toast } = useToast();
@@ -15,6 +23,9 @@ const AdminDashboard = ({ user }: { user: User }) => {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [allListings, setAllListings] = useState<any[]>([]);
   const [allRequests, setAllRequests] = useState<any[]>([]);
+  const [listingsPage, setListingsPage] = useState(1);
+  const [requestsPage, setRequestsPage] = useState(1);
+  const itemsPerPage = 5;
 
   useEffect(() => {
     fetchAdminData();
@@ -122,7 +133,9 @@ const AdminDashboard = ({ user }: { user: User }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {allListings.slice(0, 10).map((listing) => (
+                {allListings
+                  .slice((listingsPage - 1) * itemsPerPage, listingsPage * itemsPerPage)
+                  .map((listing) => (
                   <TableRow key={listing.id}>
                     <TableCell>{listing.title}</TableCell>
                     <TableCell>{listing.category}</TableCell>
@@ -133,6 +146,37 @@ const AdminDashboard = ({ user }: { user: User }) => {
                 ))}
               </TableBody>
             </Table>
+            {allListings.length > itemsPerPage && (
+              <div className="mt-4 flex justify-center">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious 
+                        onClick={() => setListingsPage(p => Math.max(1, p - 1))}
+                        className={listingsPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: Math.ceil(allListings.length / itemsPerPage) }, (_, i) => (
+                      <PaginationItem key={i + 1}>
+                        <PaginationLink
+                          onClick={() => setListingsPage(i + 1)}
+                          isActive={listingsPage === i + 1}
+                          className="cursor-pointer"
+                        >
+                          {i + 1}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
+                    <PaginationItem>
+                      <PaginationNext 
+                        onClick={() => setListingsPage(p => Math.min(Math.ceil(allListings.length / itemsPerPage), p + 1))}
+                        className={listingsPage === Math.ceil(allListings.length / itemsPerPage) ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -151,7 +195,9 @@ const AdminDashboard = ({ user }: { user: User }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {allRequests.slice(0, 10).map((request) => (
+                {allRequests
+                  .slice((requestsPage - 1) * itemsPerPage, requestsPage * itemsPerPage)
+                  .map((request) => (
                   <TableRow key={request.id}>
                     <TableCell>{request.food_id.slice(0, 8)}...</TableCell>
                     <TableCell>{request.quantity}</TableCell>
@@ -161,6 +207,37 @@ const AdminDashboard = ({ user }: { user: User }) => {
                 ))}
               </TableBody>
             </Table>
+            {allRequests.length > itemsPerPage && (
+              <div className="mt-4 flex justify-center">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious 
+                        onClick={() => setRequestsPage(p => Math.max(1, p - 1))}
+                        className={requestsPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: Math.ceil(allRequests.length / itemsPerPage) }, (_, i) => (
+                      <PaginationItem key={i + 1}>
+                        <PaginationLink
+                          onClick={() => setRequestsPage(i + 1)}
+                          isActive={requestsPage === i + 1}
+                          className="cursor-pointer"
+                        >
+                          {i + 1}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
+                    <PaginationItem>
+                      <PaginationNext 
+                        onClick={() => setRequestsPage(p => Math.min(Math.ceil(allRequests.length / itemsPerPage), p + 1))}
+                        className={requestsPage === Math.ceil(allRequests.length / itemsPerPage) ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
           </CardContent>
         </Card>
       </main>

@@ -9,12 +9,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 const MerchantDashboard = ({ user }: { user: User }) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [showAddForm, setShowAddForm] = useState(false);
   const [myDonations, setMyDonations] = useState<any[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   useEffect(() => {
     fetchMyDonations();
@@ -137,7 +147,9 @@ const MerchantDashboard = ({ user }: { user: User }) => {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {myDonations.map((donation) => (
+          {myDonations
+            .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+            .map((donation) => (
             <Card key={donation.id}>
               <CardHeader>
                 <CardTitle>{donation.title}</CardTitle>
@@ -152,6 +164,38 @@ const MerchantDashboard = ({ user }: { user: User }) => {
             </Card>
           ))}
         </div>
+
+        {myDonations.length > itemsPerPage && (
+          <div className="mt-8 flex justify-center">
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  />
+                </PaginationItem>
+                {Array.from({ length: Math.ceil(myDonations.length / itemsPerPage) }, (_, i) => (
+                  <PaginationItem key={i + 1}>
+                    <PaginationLink
+                      onClick={() => setCurrentPage(i + 1)}
+                      isActive={currentPage === i + 1}
+                      className="cursor-pointer"
+                    >
+                      {i + 1}
+                    </PaginationLink>
+                  </PaginationItem>
+                ))}
+                <PaginationItem>
+                  <PaginationNext 
+                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(myDonations.length / itemsPerPage), p + 1))}
+                    className={currentPage === Math.ceil(myDonations.length / itemsPerPage) ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
       </main>
     </div>
   );

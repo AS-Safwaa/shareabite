@@ -6,6 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, ShoppingCart, MapPin, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 interface FoodListing {
   id: string;
@@ -27,6 +35,8 @@ const UserDashboard = ({ user }: { user: User }) => {
   const navigate = useNavigate();
   const [foodListings, setFoodListings] = useState<FoodListing[]>([]);
   const [cart, setCart] = useState<{ [key: string]: number }>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   useEffect(() => {
     fetchFoodListings();
@@ -97,7 +107,9 @@ const UserDashboard = ({ user }: { user: User }) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {foodListings.map((food) => (
+          {foodListings
+            .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+            .map((food) => (
             <Card key={food.id} className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle>{food.title}</CardTitle>
@@ -129,6 +141,38 @@ const UserDashboard = ({ user }: { user: User }) => {
             </Card>
           ))}
         </div>
+
+        {foodListings.length > itemsPerPage && (
+          <div className="mt-8 flex justify-center">
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  />
+                </PaginationItem>
+                {Array.from({ length: Math.ceil(foodListings.length / itemsPerPage) }, (_, i) => (
+                  <PaginationItem key={i + 1}>
+                    <PaginationLink
+                      onClick={() => setCurrentPage(i + 1)}
+                      isActive={currentPage === i + 1}
+                      className="cursor-pointer"
+                    >
+                      {i + 1}
+                    </PaginationLink>
+                  </PaginationItem>
+                ))}
+                <PaginationItem>
+                  <PaginationNext 
+                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(foodListings.length / itemsPerPage), p + 1))}
+                    className={currentPage === Math.ceil(foodListings.length / itemsPerPage) ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
       </main>
     </div>
   );
