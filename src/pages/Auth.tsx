@@ -25,23 +25,46 @@ const Auth = () => {
     setLoading(true);
     
     const credentials = {
-      user: { email: 'user@shareabite.com', password: 'user123' },
-      admin: { email: 'admin@shareabite.com', password: 'admin123' },
-      merchant: { email: 'merchant@shareabite.com', password: 'merchant123' },
+      user: { email: 'user@shareabite.com', password: 'user123', name: 'User' },
+      admin: { email: 'admin@shareabite.com', password: 'admin123', name: 'Admin' },
+      merchant: { email: 'merchant@shareabite.com', password: 'merchant123', name: 'Merchant' },
     };
 
-    const { email, password } = credentials[role];
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { email, password, name } = credentials[role];
+    
+    // Try to sign in first
+    let { error } = await supabase.auth.signInWithPassword({ email, password });
 
+    // If sign in fails, try to sign up
     if (error) {
-      toast({
-        title: "Login failed",
-        description: error.message,
-        variant: "destructive",
+      const signUpResult = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: name },
+          emailRedirectTo: `${window.location.origin}/dashboard`,
+        },
       });
-    } else {
-      navigate("/dashboard");
+
+      if (signUpResult.error) {
+        toast({
+          title: "Login failed",
+          description: signUpResult.error.message,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+      
+      // After signup, assign the correct role
+      if (signUpResult.data.user) {
+        await supabase
+          .from('user_roles')
+          .insert({ user_id: signUpResult.data.user.id, role });
+      }
     }
+    
+    navigate("/dashboard");
     setLoading(false);
   };
 
