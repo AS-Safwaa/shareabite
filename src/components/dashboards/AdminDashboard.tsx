@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Users, Store, Package } from "lucide-react";
+import { LogOut, Users, Store, Package, ShoppingBag, TrendingUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
 import {
   Pagination,
   PaginationContent,
@@ -32,11 +33,12 @@ const AdminDashboard = ({ user }: { user: User }) => {
   }, []);
 
   const fetchAdminData = async () => {
-    const [usersData, merchantsData, listingsData, requestsData] = await Promise.all([
+    const [usersData, merchantsData, listingsData, requestsData, profiles] = await Promise.all([
       supabase.from("user_roles").select("*").eq("role", "user"),
       supabase.from("user_roles").select("*").eq("role", "merchant"),
-      supabase.from("food_listings").select("*"),
-      supabase.from("food_requests").select("*"),
+      supabase.from("food_listings").select("*, profiles!food_listings_merchant_id_fkey(full_name, email)"),
+      supabase.from("food_requests").select("*, food_listings(title), profiles(full_name, email)"),
+      supabase.from("profiles").select("*"),
     ]);
 
     setStats({
@@ -48,9 +50,7 @@ const AdminDashboard = ({ user }: { user: User }) => {
 
     if (listingsData.data) setAllListings(listingsData.data);
     if (requestsData.data) setAllRequests(requestsData.data);
-
-    const { data: profiles } = await supabase.from("profiles").select("*");
-    if (profiles) setAllUsers(profiles);
+    if (profiles.data) setAllUsers(profiles.data);
   };
 
   const handleLogout = async () => {
@@ -83,6 +83,7 @@ const AdminDashboard = ({ user }: { user: User }) => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.users}</div>
+              <p className="text-xs text-muted-foreground mt-1">Active platform users</p>
             </CardContent>
           </Card>
 
@@ -93,6 +94,7 @@ const AdminDashboard = ({ user }: { user: User }) => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.merchants}</div>
+              <p className="text-xs text-muted-foreground mt-1">Contributing merchants</p>
             </CardContent>
           </Card>
 
@@ -103,33 +105,41 @@ const AdminDashboard = ({ user }: { user: User }) => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.listings}</div>
+              <p className="text-xs text-muted-foreground mt-1">Total items uploaded</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
+              <ShoppingBag className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.requests}</div>
+              <p className="text-xs text-muted-foreground mt-1">User requests made</p>
             </CardContent>
           </Card>
         </div>
 
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Recent Food Listings</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Recent Food Listings by Merchants
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Title</TableHead>
+                  <TableHead>Merchant</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Location</TableHead>
+                  <TableHead>Quantity</TableHead>
                   <TableHead>Available</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -137,11 +147,20 @@ const AdminDashboard = ({ user }: { user: User }) => {
                   .slice((listingsPage - 1) * itemsPerPage, listingsPage * itemsPerPage)
                   .map((listing) => (
                   <TableRow key={listing.id}>
-                    <TableCell>{listing.title}</TableCell>
+                    <TableCell className="font-medium">{listing.title}</TableCell>
+                    <TableCell>{listing.profiles?.full_name || listing.profiles?.email || 'N/A'}</TableCell>
                     <TableCell>{listing.category}</TableCell>
                     <TableCell>{listing.city}</TableCell>
+                    <TableCell>{listing.quantity}</TableCell>
                     <TableCell>{listing.available_quantity}</TableCell>
-                    <TableCell className="capitalize">{listing.status}</TableCell>
+                    <TableCell>
+                      <Badge variant={listing.status === 'available' ? 'default' : 'secondary'}>
+                        {listing.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(listing.created_at).toLocaleDateString()}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -182,16 +201,22 @@ const AdminDashboard = ({ user }: { user: User }) => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Recent Requests</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingBag className="h-5 w-5" />
+              User Requests with Complete Data
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Food ID</TableHead>
+                  <TableHead>Food Item</TableHead>
+                  <TableHead>User</TableHead>
                   <TableHead>Quantity</TableHead>
                   <TableHead>Pickup Time</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Request Date</TableHead>
+                  <TableHead>Notes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -199,10 +224,23 @@ const AdminDashboard = ({ user }: { user: User }) => {
                   .slice((requestsPage - 1) * itemsPerPage, requestsPage * itemsPerPage)
                   .map((request) => (
                   <TableRow key={request.id}>
-                    <TableCell>{request.food_id.slice(0, 8)}...</TableCell>
-                    <TableCell>{request.quantity}</TableCell>
-                    <TableCell>{request.pickup_time}</TableCell>
-                    <TableCell className="capitalize">{request.status}</TableCell>
+                    <TableCell className="font-medium">{request.food_listings?.title || 'N/A'}</TableCell>
+                    <TableCell>{request.profiles?.full_name || request.profiles?.email || 'N/A'}</TableCell>
+                    <TableCell>{request.quantity} servings</TableCell>
+                    <TableCell className="text-sm">{request.pickup_time}</TableCell>
+                    <TableCell>
+                      <Badge variant={
+                        request.status === 'approved' ? 'default' : 
+                        request.status === 'pending' ? 'secondary' : 
+                        'destructive'
+                      }>
+                        {request.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(request.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-sm">{request.notes || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

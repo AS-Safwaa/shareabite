@@ -4,8 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, ShoppingCart, MapPin, Clock } from "lucide-react";
+import { LogOut, ShoppingCart, MapPin, Clock, Trash2, Package } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
   Pagination,
   PaginationContent,
@@ -35,11 +37,14 @@ const UserDashboard = ({ user }: { user: User }) => {
   const navigate = useNavigate();
   const [foodListings, setFoodListings] = useState<FoodListing[]>([]);
   const [cart, setCart] = useState<{ [key: string]: number }>({});
+  const [myOrders, setMyOrders] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isCartOpen, setIsCartOpen] = useState(false);
   const itemsPerPage = 6;
 
   useEffect(() => {
     fetchFoodListings();
+    fetchMyOrders();
   }, []);
 
   const fetchFoodListings = async () => {
@@ -52,14 +57,88 @@ const UserDashboard = ({ user }: { user: User }) => {
     if (data) setFoodListings(data);
   };
 
+  const fetchMyOrders = async () => {
+    const { data } = await supabase
+      .from("food_requests")
+      .select("*, food_listings(*)")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (data) setMyOrders(data);
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/auth");
   };
 
   const addToCart = (foodId: string) => {
-    setCart((prev) => ({ ...prev, [foodId]: (prev[foodId] || 0) + 1 }));
+    const food = foodListings.find(f => f.id === foodId);
+    if (!food) return;
+    
+    const currentQty = cart[foodId] || 0;
+    if (currentQty >= food.available_quantity) {
+      toast({ title: "Cannot add more", description: "Maximum available quantity reached", variant: "destructive" });
+      return;
+    }
+    
+    setCart((prev) => ({ ...prev, [foodId]: currentQty + 1 }));
     toast({ title: "Added to cart" });
+  };
+
+  const removeFromCart = (foodId: string) => {
+    setCart((prev) => {
+      const newCart = { ...prev };
+      if (newCart[foodId] > 1) {
+        newCart[foodId]--;
+      } else {
+        delete newCart[foodId];
+      }
+      return newCart;
+    });
+    toast({ title: "Removed from cart" });
+  };
+
+  const clearCart = () => {
+    setCart({});
+    toast({ title: "Cart cleared" });
+  };
+
+  const getCartTotal = () => {
+    return Object.keys(cart).reduce((total, foodId) => total + cart[foodId], 0);
+  };
+
+  const checkoutCart = async () => {
+    if (Object.keys(cart).length === 0) {
+      toast({ title: "Cart is empty", variant: "destructive" });
+      return;
+    }
+
+    const requests = Object.keys(cart).map(foodId => {
+      const food = foodListings.find(f => f.id === foodId);
+      if (!food) return null;
+
+      return {
+        food_id: foodId,
+        user_id: user.id,
+        merchant_id: food.merchant_id,
+        quantity: cart[foodId],
+        pickup_time: `${food.pickup_time_start} - ${food.pickup_time_end}`,
+        status: 'pending'
+      };
+    }).filter(Boolean);
+
+    const { error } = await supabase.from("food_requests").insert(requests);
+
+    if (error) {
+      toast({ title: "Checkout failed", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Orders placed successfully!", description: `${requests.length} items ordered` });
+      setCart({});
+      setIsCartOpen(false);
+      fetchFoodListings();
+      fetchMyOrders();
+    }
   };
 
   const requestFood = async (foodId: string) => {
@@ -94,13 +173,122 @@ const UserDashboard = ({ user }: { user: User }) => {
       <nav className="bg-card shadow-sm border-b">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-primary">ShareABite</h1>
-          <Button onClick={handleLogout} variant="outline">
-            <LogOut className="mr-2 h-4 w-4" /> Logout
-          </Button>
+          <div className="flex items-center gap-4">
+            <Sheet open={isCartOpen} onOpenChange={setIsCartOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" className="relative">
+                  <ShoppingCart className="mr-2 h-4 w-4" />
+                  Cart
+                  {getCartTotal() > 0 && (
+                    <Badge className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 flex items-center justify-center">
+                      {getCartTotal()}
+                    </Badge>
+                  )}
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+                <SheetHeader>
+                  <SheetTitle>Your Cart ({getCartTotal()} items)</SheetTitle>
+                </SheetHeader>
+                <div className="mt-6 space-y-4">
+                  {Object.keys(cart).length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">Your cart is empty</p>
+                  ) : (
+                    <>
+                      {Object.keys(cart).map(foodId => {
+                        const food = foodListings.find(f => f.id === foodId);
+                        if (!food) return null;
+                        return (
+                          <Card key={foodId}>
+                            <CardContent className="pt-6">
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1">
+                                  <h3 className="font-semibold">{food.title}</h3>
+                                  <p className="text-sm text-muted-foreground">{food.category}</p>
+                                  <p className="text-sm mt-1">{food.location}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => removeFromCart(foodId)}
+                                  >
+                                    -
+                                  </Button>
+                                  <span className="w-8 text-center font-semibold">{cart[foodId]}</span>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => addToCart(foodId)}
+                                  >
+                                    +
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="destructive"
+                                    onClick={() => {
+                                      setCart(prev => {
+                                        const newCart = { ...prev };
+                                        delete newCart[foodId];
+                                        return newCart;
+                                      });
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                      <div className="flex gap-2 pt-4">
+                        <Button variant="outline" onClick={clearCart} className="flex-1">
+                          Clear Cart
+                        </Button>
+                        <Button onClick={checkoutCart} className="flex-1">
+                          Place Order ({getCartTotal()} items)
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </SheetContent>
+            </Sheet>
+            <Button onClick={handleLogout} variant="outline">
+              <LogOut className="mr-2 h-4 w-4" /> Logout
+            </Button>
+          </div>
         </div>
       </nav>
 
       <main className="container mx-auto px-4 py-8">
+        {myOrders.length > 0 && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                My Orders ({myOrders.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {myOrders.slice(0, 3).map((order) => (
+                  <div key={order.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <div>
+                      <p className="font-semibold">{order.food_listings?.title}</p>
+                      <p className="text-sm text-muted-foreground">Quantity: {order.quantity} | Pickup: {order.pickup_time}</p>
+                    </div>
+                    <Badge variant={order.status === 'pending' ? 'secondary' : order.status === 'approved' ? 'default' : 'destructive'}>
+                      {order.status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="mb-8">
           <h2 className="text-3xl font-bold mb-2">Available Food</h2>
           <p className="text-muted-foreground">Browse and request food from local merchants</p>

@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Plus } from "lucide-react";
+import { LogOut, Plus, Bell, CheckCircle, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Pagination,
   PaginationContent,
@@ -23,11 +25,14 @@ const MerchantDashboard = ({ user }: { user: User }) => {
   const navigate = useNavigate();
   const [showAddForm, setShowAddForm] = useState(false);
   const [myDonations, setMyDonations] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [ordersPage, setOrdersPage] = useState(1);
   const itemsPerPage = 6;
 
   useEffect(() => {
     fetchMyDonations();
+    fetchOrders();
   }, []);
 
   const fetchMyDonations = async () => {
@@ -38,6 +43,30 @@ const MerchantDashboard = ({ user }: { user: User }) => {
       .order("created_at", { ascending: false });
 
     if (data) setMyDonations(data);
+  };
+
+  const fetchOrders = async () => {
+    const { data } = await supabase
+      .from("food_requests")
+      .select("*, food_listings(*), profiles(*)")
+      .eq("merchant_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (data) setOrders(data);
+  };
+
+  const updateOrderStatus = async (orderId: string, status: string) => {
+    const { error } = await supabase
+      .from("food_requests")
+      .update({ status })
+      .eq("id", orderId);
+
+    if (error) {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Order ${status}` });
+      fetchOrders();
+    }
   };
 
   const handleLogout = async () => {
@@ -78,13 +107,77 @@ const MerchantDashboard = ({ user }: { user: User }) => {
       <nav className="bg-card shadow-sm border-b">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-primary">ShareABite - Merchant</h1>
-          <Button onClick={handleLogout} variant="outline">
-            <LogOut className="mr-2 h-4 w-4" /> Logout
-          </Button>
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <Bell className="h-5 w-5 text-muted-foreground" />
+              {orders.filter(o => o.status === 'pending').length > 0 && (
+                <Badge className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 flex items-center justify-center">
+                  {orders.filter(o => o.status === 'pending').length}
+                </Badge>
+              )}
+            </div>
+            <Button onClick={handleLogout} variant="outline">
+              <LogOut className="mr-2 h-4 w-4" /> Logout
+            </Button>
+          </div>
         </div>
       </nav>
 
       <main className="container mx-auto px-4 py-8">
+        {orders.filter(o => o.status === 'pending').length > 0 && (
+          <Card className="mb-8 border-primary">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5" />
+                New Orders ({orders.filter(o => o.status === 'pending').length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Food Item</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Quantity</TableHead>
+                    <TableHead>Pickup Time</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {orders
+                    .filter(o => o.status === 'pending')
+                    .slice((ordersPage - 1) * 5, ordersPage * 5)
+                    .map((order) => (
+                      <TableRow key={order.id}>
+                        <TableCell className="font-medium">{order.food_listings?.title}</TableCell>
+                        <TableCell>{order.profiles?.full_name || order.profiles?.email}</TableCell>
+                        <TableCell>{order.quantity}</TableCell>
+                        <TableCell>{order.pickup_time}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button 
+                              size="sm" 
+                              onClick={() => updateOrderStatus(order.id, 'approved')}
+                            >
+                              <CheckCircle className="h-4 w-4 mr-1" /> Approve
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="destructive"
+                              onClick={() => updateOrderStatus(order.id, 'rejected')}
+                            >
+                              <XCircle className="h-4 w-4 mr-1" /> Reject
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="flex justify-between items-center mb-8">
           <div>
             <h2 className="text-3xl font-bold mb-2">My Donations</h2>
